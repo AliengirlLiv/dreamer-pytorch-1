@@ -375,7 +375,7 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
   writer.add_scalar("kl_loss", metrics['kl_loss'][0][-1], metrics['steps'][-1])
   writer.add_scalar("actor_loss", metrics['actor_loss'][0][-1], metrics['steps'][-1])
   writer.add_scalar("value_loss", metrics['value_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("x_pos", metrics['x_pos'][0][-1], metrics['steps'][-1])
+  writer.add_scalar("x_pos", metrics['x_pos'][-1], metrics['steps'][-1])
   print("episodes: {}, total_steps: {}, train_reward: {} ".format(metrics['episodes'][-1], metrics['steps'][-1], metrics['train_rewards'][-1]))
 
   # Checkpoint models
