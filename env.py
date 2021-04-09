@@ -26,10 +26,11 @@ def _images_to_observation(images, bit_depth):
 
 
 class ControlSuiteEnv():
-  def __init__(self, env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
+  def __init__(self, env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift):
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
     domain, task = env.split('-')
+    self.distribution_shift = distribution_shift
     self.symbolic = symbolic
     self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={'random': seed})
     if not symbolic:
@@ -39,16 +40,48 @@ class ControlSuiteEnv():
     if action_repeat != CONTROL_SUITE_ACTION_REPEATS[domain]:
       print('Using action repeat %d; recommended action repeat for domain is %d' % (action_repeat, CONTROL_SUITE_ACTION_REPEATS[domain]))
     self.bit_depth = bit_depth
+    self.initial_body_mass = None
+    self.initial_color = None
+    self.reset()
 
   def reset(self):
     self.t = 0  # Reset internal timer
     state = self._env.reset()
+    if self.initial_body_mass is None:
+      self.initial_body_mass = self._env.physics.model.body_mass
+    else:
+      self._env.physics.model.body_mass[:] = self.initial_body_mass
+    if self.initial_color is None:
+      self.initial_color = self._env.physics.model.geom_rgba[1:]
+    else:
+      self._env.physics.model.geom_rgba[1:] = self.initial_color
     if self.symbolic:
       return torch.tensor(np.concatenate([np.asarray([obs]) if isinstance(obs, float) else obs for obs in state.observation.values()], axis=0), dtype=torch.float32).unsqueeze(dim=0)
     else:
       return _images_to_observation(self._env.physics.render(camera_id=0), self.bit_depth)
 
+  def get_x_pos(self):
+    return self._env.physics.named.data.geom_xpos['torso'][0]
+
+  def get_body_mass(self):
+    return self._env.physics.model.body_mass
+
   def step(self, action):
+    TRANSITION_POINT = 10
+    MASS_SCALE_FACTOR = 10
+    COLOR_SCALE_FACTOR = 2
+    x_pos = self.get_x_pos()
+    if self.distribution_shift == 'mass':
+      if x_pos > TRANSITION_POINT:
+        self._env.physics.model.body_mass[:] = self.initial_body_mass * MASS_SCALE_FACTOR
+      else:
+        self._env.physics.model.body_mass[:] = self.initial_body_mass
+    else:
+      if x_pos > TRANSITION_POINT:
+        self._env.physics.model.geom_rgba[1:] = self.initial_color * COLOR_SCALE_FACTOR
+      else:
+        self._env.physics.model.geom_rgba[1:] = self.initial_color
+
     action = action.detach().numpy()
     reward = 0
     for k in range(self.action_repeat):
@@ -140,11 +173,11 @@ class GymEnv():
     return torch.from_numpy(self._env.action_space.sample())
 
 
-def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth):
+def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift):
   if env in GYM_ENVS:
     return GymEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
   elif env in CONTROL_SUITE_ENVS:
-    return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
+    return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift)
 
 
 # Wrapper for batching environments together

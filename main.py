@@ -67,6 +67,7 @@ parser.add_argument('--checkpoint-experience', action='store_true', help='Checkp
 parser.add_argument('--models', type=str, default='', metavar='M', help='Load model checkpoint')
 parser.add_argument('--experience-replay', type=str, default='', metavar='ER', help='Load experience replay')
 parser.add_argument('--render', action='store_true', help='Render environment')
+parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color'])
 args = parser.parse_args()
 args.overshooting_distance = min(args.chunk_size, args.overshooting_distance)  # Overshooting distance cannot be greater than chunk size
 print(' ' * 26 + 'Options')
@@ -87,13 +88,14 @@ else:
   print("using CPU")
   args.device = torch.device('cpu')
 metrics = {'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [], 
-           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': []}
+           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [], 'x_pos': []}
 
 summary_name = results_dir + "/{}_{}_log"
 writer = SummaryWriter(summary_name.format(args.env, args.id))
 
 # Initialise training environment and experience replay memory
-env = Env(args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat, args.bit_depth)
+env = Env(args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat, args.bit_depth,
+          args.distribution_shift)
 if args.experience_replay is not '' and os.path.exists(args.experience_replay):
   D = torch.load(args.experience_replay)
   metrics['steps'], metrics['episodes'] = [D.steps] * D.episodes, list(range(1, D.episodes + 1))
@@ -314,6 +316,7 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     metrics['steps'].append(t + metrics['steps'][-1])
     metrics['episodes'].append(episode)
     metrics['train_rewards'].append(total_reward)
+    metrics['x_pos'].append(env.get_x_pos())
     lineplot(metrics['episodes'][-len(metrics['train_rewards']):], metrics['train_rewards'], 'train_rewards', results_dir)
 
 
@@ -371,7 +374,8 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
   writer.add_scalar("reward_loss", metrics['reward_loss'][0][-1], metrics['steps'][-1])
   writer.add_scalar("kl_loss", metrics['kl_loss'][0][-1], metrics['steps'][-1])
   writer.add_scalar("actor_loss", metrics['actor_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("value_loss", metrics['value_loss'][0][-1], metrics['steps'][-1])  
+  writer.add_scalar("value_loss", metrics['value_loss'][0][-1], metrics['steps'][-1])
+  writer.add_scalar("x_pos", metrics['x_pos'][0][-1], metrics['steps'][-1])
   print("episodes: {}, total_steps: {}, train_reward: {} ".format(metrics['episodes'][-1], metrics['steps'][-1], metrics['train_rewards'][-1]))
 
   # Checkpoint models
