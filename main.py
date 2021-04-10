@@ -331,7 +331,8 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     actor_model.eval()
     value_model.eval()
     # Initialise parallelised test environments
-    test_envs = EnvBatcher(Env, (args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat, args.bit_depth), {}, args.test_episodes)
+    test_envs = EnvBatcher(Env, (args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat,
+                                 args.bit_depth, args.distribution_shift), {}, args.test_episodes)
     
     with torch.no_grad():
       observation, total_rewards, video_frames = test_envs.reset(), np.zeros((args.test_episodes, )), []
