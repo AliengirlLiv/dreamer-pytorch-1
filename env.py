@@ -55,10 +55,13 @@ class ControlSuiteEnv():
       self.initial_color = self._env.physics.model.geom_rgba[1:]
     else:
       self._env.physics.model.geom_rgba[1:] = self.initial_color
+    state = torch.tensor([self.get_x_pos()]).unsqueeze(0)
     if self.symbolic:
-      return torch.tensor(np.concatenate([np.asarray([obs]) if isinstance(obs, float) else obs for obs in state.observation.values()], axis=0), dtype=torch.float32).unsqueeze(dim=0)
+      return torch.tensor(np.concatenate([np.asarray([obs]) if isinstance(obs, float) else obs
+                                          for obs in state.observation.values()], axis=0),
+                          dtype=torch.float32).unsqueeze(dim=0), state
     else:
-      return _images_to_observation(self._env.physics.render(camera_id=0), self.bit_depth)
+      return _images_to_observation(self._env.physics.render(camera_id=0), self.bit_depth), state
 
   def get_x_pos(self):
     return self._env.physics.named.data.geom_xpos['torso'][0]
@@ -95,7 +98,8 @@ class ControlSuiteEnv():
       observation = torch.tensor(np.concatenate([np.asarray([obs]) if isinstance(obs, float) else obs for obs in state.observation.values()], axis=0), dtype=torch.float32).unsqueeze(dim=0)
     else:
       observation = _images_to_observation(self._env.physics.render(camera_id=0), self.bit_depth)
-    return observation, reward, done
+    state = torch.tensor([self.get_x_pos()]).unsqueeze(0)
+    return (observation, state), reward, done
 
   def render(self):
     cv2.imshow('screen', self._env.physics.render(camera_id=0)[:, :, ::-1])

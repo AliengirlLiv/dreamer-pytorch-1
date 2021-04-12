@@ -29,6 +29,7 @@ parser.add_argument('--experience-size', type=int, default=1000000, metavar='D',
 parser.add_argument('--cnn-activation-function', type=str, default='relu', choices=dir(F), help='Model activation function for a convolution layer')
 parser.add_argument('--dense-activation-function', type=str, default='elu', choices=dir(F), help='Model activation function a dense layer')
 parser.add_argument('--embedding-size', type=int, default=1024, metavar='E', help='Observation embedding size')  # Note that the default encoder for visual observations outputs a 1024D vector; for other embedding sizes an additional fully-connected layer is used
+parser.add_argument('--state-concat-size', type=int, default=1, help='Additional state size')
 parser.add_argument('--hidden-size', type=int, default=200, metavar='H', help='Hidden size')
 parser.add_argument('--belief-size', type=int, default=200, metavar='H', help='Belief/hidden size')
 parser.add_argument('--state-size', type=int, default=30, metavar='Z', help='State/latent size')
@@ -100,7 +101,7 @@ if args.experience_replay is not '' and os.path.exists(args.experience_replay):
   D = torch.load(args.experience_replay)
   metrics['steps'], metrics['episodes'] = [D.steps] * D.episodes, list(range(1, D.episodes + 1))
 elif not args.test:
-  D = ExperienceReplay(args.experience_size, args.symbolic_env, env.observation_size, env.action_size, args.bit_depth, args.device)
+  D = ExperienceReplay(args.experience_size, args.symbolic_env, env.observation_size, args.state_concat_size, env.action_size, args.bit_depth, args.device)
   # Initialise dataset D with S random seed episodes
   for s in range(1, args.seed_episodes + 1):
     observation, done, t = env.reset(), False, 0
@@ -115,8 +116,8 @@ elif not args.test:
 
 
 # Initialise model parameters randomly
-transition_model = TransitionModel(args.belief_size, args.state_size, env.action_size, args.hidden_size, args.embedding_size, args.dense_activation_function).to(device=args.device)
-observation_model = ObservationModel(args.symbolic_env, env.observation_size, args.belief_size, args.state_size, args.embedding_size, args.cnn_activation_function).to(device=args.device)
+transition_model = TransitionModel(args.belief_size, args.state_size, env.action_size, args.hidden_size, args.embedding_size + args.state_concat_size, args.dense_activation_function).to(device=args.device)
+observation_model = ObservationModel(args.symbolic_env, env.observation_size, args.belief_size, args.state_size, args.embedding_size + args.state_concat_size, args.cnn_activation_function).to(device=args.device)
 reward_model = RewardModel(args.belief_size, args.state_size, args.hidden_size, args.dense_activation_function).to(device=args.device)
 encoder = Encoder(args.symbolic_env, env.observation_size, args.embedding_size, args.cnn_activation_function).to(device=args.device)
 actor_model = ActorModel(args.belief_size, args.state_size, args.hidden_size, env.action_size, args.dense_activation_function).to(device=args.device)
@@ -148,7 +149,7 @@ free_nats = torch.full((1, ), args.free_nats, device=args.device)  # Allowed dev
 def update_belief_and_act(args, env, planner, transition_model, encoder, belief, posterior_state, action, observation, explore=False):
   # Infer belief over current state q(s_t|o≤t,a<t) from the history
   # print("action size: ",action.size()) torch.Size([1, 6])
-  belief, _, _, _, posterior_state, _, _ = transition_model(posterior_state, action.unsqueeze(dim=0), belief, encoder(observation).unsqueeze(dim=0))  # Action and observation need extra time dimension
+  belief, _, _, _, posterior_state, _, _ = transition_model(posterior_state, action.unsqueeze(dim=0), belief, encoder(*observation).unsqueeze(dim=0))  # Action and observation need extra time dimension
   belief, posterior_state = belief.squeeze(dim=0), posterior_state.squeeze(dim=0)  # Remove time dimension from belief/state
   if args.algo=="dreamer":
     action = planner.get_action(belief, posterior_state, det=not(explore))
@@ -199,7 +200,8 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     # Create initial belief and state for time t = 0
     init_belief, init_state = torch.zeros(args.batch_size, args.belief_size, device=args.device), torch.zeros(args.batch_size, args.state_size, device=args.device)
     # Update belief/state using posterior from previous belief/state, previous action and current observation (over entire sequence at once)
-    beliefs, prior_states, prior_means, prior_std_devs, posterior_states, posterior_means, posterior_std_devs = transition_model(init_state, actions[:-1], init_belief, bottle(encoder, (observations[1:], )), nonterminals[:-1])
+    observations, states = observations
+    beliefs, prior_states, prior_means, prior_std_devs, posterior_states, posterior_means, posterior_std_devs = transition_model(init_state, actions[:-1], init_belief, bottle(encoder, (observations[1:], states[1:])), nonterminals[:-1])
     # Calculate observation likelihood, reward likelihood and KL losses (for t = 0 only for latent overshooting); sum over final dims, average over batch and time (original implementation, though paper seems to miss 1/T scaling?)
     if args.worldmodel_LogProbLoss:
       observation_dist = Normal(bottle(observation_model, (beliefs, posterior_states)), 1)

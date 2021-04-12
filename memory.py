@@ -4,11 +4,13 @@ from env import postprocess_observation, preprocess_observation_
 
 
 class ExperienceReplay():
-  def __init__(self, size, symbolic_env, observation_size, action_size, bit_depth, device):
+  def __init__(self, size, symbolic_env, observation_size, state_size, action_size, bit_depth, device):
     self.device = device
     self.symbolic_env = symbolic_env
     self.size = size
     self.observations = np.empty((size, observation_size) if symbolic_env else (size, 3, 64, 64), dtype=np.float32 if symbolic_env else np.uint8)
+    self.states = np.empty((size, state_size), dtype=np.float32)
+    self.has_state = state_size > 0
     self.actions = np.empty((size, action_size), dtype=np.float32)
     self.rewards = np.empty((size, ), dtype=np.float32) 
     self.nonterminals = np.empty((size, 1), dtype=np.float32)
@@ -18,6 +20,9 @@ class ExperienceReplay():
     self.bit_depth = bit_depth
 
   def append(self, observation, action, reward, done):
+    if type(observation) is tuple:
+      observation, state = observation
+      self.states[self.idx] = state.numpy()
     if self.symbolic_env:
       self.observations[self.idx] = observation.numpy()
     else:
@@ -43,7 +48,10 @@ class ExperienceReplay():
     observations = torch.as_tensor(self.observations[vec_idxs].astype(np.float32))
     if not self.symbolic_env:
       preprocess_observation_(observations, self.bit_depth)  # Undo discretisation for visual observations
-    return observations.reshape(L, n, *observations.shape[1:]), self.actions[vec_idxs].reshape(L, n, -1), self.rewards[vec_idxs].reshape(L, n), self.nonterminals[vec_idxs].reshape(L, n, 1)
+    observations = observations.reshape(L, n, *observations.shape[1:])
+    if self.has_state:
+      observations = (observations, self.states[vec_idxs].reshape(L, n, -1))
+    return observations, self.actions[vec_idxs].reshape(L, n, -1), self.rewards[vec_idxs].reshape(L, n), self.nonterminals[vec_idxs].reshape(L, n, 1)
 
   # Returns a batch of sequence chunks uniformly sampled from the memory
   def sample(self, n, L):
@@ -56,4 +64,5 @@ class ExperienceReplay():
     # [2199 2200 2201 ... 2246 2247 2248]
     # [ 686  687  688 ...  733  734  735]
     # [1377 1378 1379 ... 1424 1425 1426]]
-    return [torch.as_tensor(item).to(device=self.device) for item in batch]
+    return [torch.as_tensor(item).to(device=self.device) if type(item) is not tuple else tuple([torch.as_tensor(item_i).to(device=self.device) for item_i in item])
+             for item in batch]

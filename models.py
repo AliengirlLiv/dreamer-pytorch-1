@@ -240,21 +240,22 @@ class VisualEncoder(jit.ScriptModule):
     self.modules = [self.conv1, self.conv2, self.conv3, self.conv4]
 
   @jit.script_method
-  def forward(self, observation):
+  def forward(self, observation, state):
     hidden = self.act_fn(self.conv1(observation))
     hidden = self.act_fn(self.conv2(hidden))
     hidden = self.act_fn(self.conv3(hidden))
     hidden = self.act_fn(self.conv4(hidden))
     hidden = hidden.view(-1, 1024)
     hidden = self.fc(hidden)  # Identity if embedding size is 1024 else linear projection
+    hidden = torch.cat([hidden, state], dim=-1)
     return hidden
 
 
-def Encoder(symbolic, observation_size, embedding_size, activation_function='relu'):
+def Encoder(symbolic, observation_size, embedding_size, state_concat_size=0, activation_function='relu'):
   if symbolic:
-    return SymbolicEncoder(observation_size, embedding_size, activation_function)
+    return SymbolicEncoder(observation_size, embedding_size, state_concat_size)
   else:
-    return VisualEncoder(embedding_size, activation_function)
+    return VisualEncoder(embedding_size, state_concat_size)
 
 
 # "atanh", "TanhBijector" and "SampleDist" are from the following repo
