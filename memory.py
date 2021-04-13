@@ -22,7 +22,7 @@ class ExperienceReplay():
   def append(self, observation, action, reward, done):
     if type(observation) is tuple:
       observation, state = observation
-      self.states[self.idx] = state.numpy()
+      self.states[self.idx] = state.cpu().numpy()
     if self.symbolic_env:
       self.observations[self.idx] = observation.numpy()
     else:

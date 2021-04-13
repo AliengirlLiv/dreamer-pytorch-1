@@ -97,7 +97,7 @@ writer = SummaryWriter(summary_name.format(args.env, args.id))
 # Initialise training environment and experience replay memory
 env = Env(args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat, args.bit_depth,
           args.distribution_shift)
-if args.experience_replay is not '' and os.path.exists(args.experience_replay):
+if args.experience_replay != '' and os.path.exists(args.experience_replay):
   D = torch.load(args.experience_replay)
   metrics['steps'], metrics['episodes'] = [D.steps] * D.episodes, list(range(1, D.episodes + 1))
 elif not args.test:
