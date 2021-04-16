@@ -45,11 +45,11 @@ class ControlSuiteEnv():
     self.x_pos = 0
 
     if self.initial_body_mass is None:
-      self.initial_body_mass = self._env.physics.model.body_mass
+      self.initial_body_mass = self._env.physics.model.body_mass.copy()
     else:
       self._env.physics.model.body_mass[:] = self.initial_body_mass
     if self.initial_color is None:
-      self.initial_color = self._env.physics.model.geom_rgba[1:]
+      self.initial_color = self._env.physics.model.geom_rgba[1:].copy()
     else:
       self._env.physics.model.geom_rgba[1:] = self.initial_color
     
@@ -61,8 +61,6 @@ class ControlSuiteEnv():
     state = self._env.reset()
     self._env.physics.model.body_mass[:] = self.initial_body_mass
     self._env.physics.model.geom_rgba[1:] = self.initial_color
-    if self.x_pos > 10:
-      import pdb; pdb.set_trace()
     
     state = torch.tensor([self.get_x_pos()]).unsqueeze(0)
     if self.symbolic:
@@ -85,7 +83,6 @@ class ControlSuiteEnv():
     x_pos = self.get_x_pos()
     if self.distribution_shift == 'mass':
       if x_pos > TRANSITION_POINT:
-        import pdb; pdb.set_trace()
         self.x_pos = x_pos
         self._env.physics.model.body_mass[:] = self.initial_body_mass * MASS_SCALE_FACTOR
       else:

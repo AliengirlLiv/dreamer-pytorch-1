@@ -388,11 +388,11 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
 
   writer.add_scalar("train_reward", metrics['train_rewards'][-1], metrics['steps'][-1])
   writer.add_scalar("train/episode_reward", metrics['train_rewards'][-1], metrics['steps'][-1]*args.action_repeat)
-  writer.add_scalar("observation_loss",  np.mean(metrics['observation_loss'][0]), metrics['steps'][-1])
-  writer.add_scalar("reward_loss", np.mean(metrics['reward_loss'][0]), metrics['steps'][-1])
-  writer.add_scalar("kl_loss",  np.mean(metrics['kl_loss'][0]), metrics['steps'][-1])
-  writer.add_scalar("actor_loss",  np.mean(metrics['actor_loss'][0]), metrics['steps'][-1])
-  writer.add_scalar("value_loss",  np.mean(metrics['value_loss'][0]), metrics['steps'][-1])
+  writer.add_scalar("observation_loss",  np.mean(metrics['observation_loss'][-1]), metrics['steps'][-1])
+  writer.add_scalar("reward_loss", np.mean(metrics['reward_loss'][-1]), metrics['steps'][-1])
+  writer.add_scalar("kl_loss",  np.mean(metrics['kl_loss'][-1]), metrics['steps'][-1])
+  writer.add_scalar("actor_loss",  np.mean(metrics['actor_loss'][-1]), metrics['steps'][-1])
+  writer.add_scalar("value_loss",  np.mean(metrics['value_loss'][-1]), metrics['steps'][-1])
   writer.add_scalar("x_pos", metrics['x_pos'][-1], metrics['steps'][-1])
   writer.add_scalar("mass", metrics['mass'][-1], metrics['steps'][-1])
 
