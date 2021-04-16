@@ -89,7 +89,7 @@ else:
   print("using CPU")
   args.device = torch.device('cpu')
 metrics = {'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [], 
-           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [], 'x_pos': []}
+           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [], 'x_pos': [], 'mass' : []}
 
 summary_name = results_dir + "/{}_{}_log"
 writer = SummaryWriter(summary_name.format(args.env, args.id))
@@ -327,6 +327,8 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     metrics['episodes'].append(episode)
     metrics['train_rewards'].append(total_reward)
     metrics['x_pos'].append(env.get_x_pos())
+    metrics['mass'].append(np.mean(env.get_body_mass()))
+
     lineplot(metrics['episodes'][-len(metrics['train_rewards']):], metrics['train_rewards'], 'train_rewards', results_dir)
 
 
@@ -386,12 +388,14 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
 
   writer.add_scalar("train_reward", metrics['train_rewards'][-1], metrics['steps'][-1])
   writer.add_scalar("train/episode_reward", metrics['train_rewards'][-1], metrics['steps'][-1]*args.action_repeat)
-  writer.add_scalar("observation_loss", metrics['observation_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("reward_loss", metrics['reward_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("kl_loss", metrics['kl_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("actor_loss", metrics['actor_loss'][0][-1], metrics['steps'][-1])
-  writer.add_scalar("value_loss", metrics['value_loss'][0][-1], metrics['steps'][-1])
+  writer.add_scalar("observation_loss",  np.mean(metrics['observation_loss'][0]), metrics['steps'][-1])
+  writer.add_scalar("reward_loss", np.mean(metrics['reward_loss'][0]), metrics['steps'][-1])
+  writer.add_scalar("kl_loss",  np.mean(metrics['kl_loss'][0]), metrics['steps'][-1])
+  writer.add_scalar("actor_loss",  np.mean(metrics['actor_loss'][0]), metrics['steps'][-1])
+  writer.add_scalar("value_loss",  np.mean(metrics['value_loss'][0]), metrics['steps'][-1])
   writer.add_scalar("x_pos", metrics['x_pos'][-1], metrics['steps'][-1])
+  writer.add_scalar("mass", metrics['mass'][-1], metrics['steps'][-1])
+
   print("episodes: {}, total_steps: {}, train_reward: {} ".format(metrics['episodes'][-1], metrics['steps'][-1], metrics['train_rewards'][-1]))
 
   # Checkpoint models

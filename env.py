@@ -42,11 +42,8 @@ class ControlSuiteEnv():
     self.bit_depth = bit_depth
     self.initial_body_mass = None
     self.initial_color = None
-    self.reset()
+    self.x_pos = 0
 
-  def reset(self):
-    self.t = 0  # Reset internal timer
-    state = self._env.reset()
     if self.initial_body_mass is None:
       self.initial_body_mass = self._env.physics.model.body_mass
     else:
@@ -55,6 +52,18 @@ class ControlSuiteEnv():
       self.initial_color = self._env.physics.model.geom_rgba[1:]
     else:
       self._env.physics.model.geom_rgba[1:] = self.initial_color
+    
+    self.reset()
+
+
+  def reset(self):
+    self.t = 0  # Reset internal timer
+    state = self._env.reset()
+    self._env.physics.model.body_mass[:] = self.initial_body_mass
+    self._env.physics.model.geom_rgba[1:] = self.initial_color
+    if self.x_pos > 10:
+      import pdb; pdb.set_trace()
+    
     state = torch.tensor([self.get_x_pos()]).unsqueeze(0)
     if self.symbolic:
       return torch.tensor(np.concatenate([np.asarray([obs]) if isinstance(obs, float) else obs
@@ -71,11 +80,13 @@ class ControlSuiteEnv():
 
   def step(self, action):
     TRANSITION_POINT = 10
-    MASS_SCALE_FACTOR = 10
+    MASS_SCALE_FACTOR = 3
     COLOR_SCALE_FACTOR = 2
     x_pos = self.get_x_pos()
     if self.distribution_shift == 'mass':
       if x_pos > TRANSITION_POINT:
+        import pdb; pdb.set_trace()
+        self.x_pos = x_pos
         self._env.physics.model.body_mass[:] = self.initial_body_mass * MASS_SCALE_FACTOR
       else:
         self._env.physics.model.body_mass[:] = self.initial_body_mass
