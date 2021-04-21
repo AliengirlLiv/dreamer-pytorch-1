@@ -26,11 +26,12 @@ def _images_to_observation(images, bit_depth):
 
 
 class ControlSuiteEnv():
-  def __init__(self, env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift):
+  def __init__(self, env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift, scale_factor):
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
     domain, task = env.split('-')
     self.distribution_shift = distribution_shift
+    self.scale_factor = scale_factor
     self.symbolic = symbolic
     self._env = suite.load(domain_name=domain, task_name=task, task_kwargs={'random': seed})
     if not symbolic:
@@ -42,6 +43,7 @@ class ControlSuiteEnv():
     self.bit_depth = bit_depth
     self.initial_body_mass = None
     self.initial_color = None
+    self.initial_friction = None
     self.x_pos = 0
 
     if self.initial_body_mass is None:
@@ -52,6 +54,10 @@ class ControlSuiteEnv():
       self.initial_color = self._env.physics.model.geom_rgba[1:].copy()
     else:
       self._env.physics.model.geom_rgba[1:] = self.initial_color
+    if self.initial_friction is None:
+      self.initial_friction = self._env.physics.model.geom_friction[:, 0].copy()
+    else:
+      self._env.physics.model.geom_friction[:, 0] = self.initial_friction
     
     self.reset()
 
@@ -78,20 +84,23 @@ class ControlSuiteEnv():
 
   def step(self, action):
     TRANSITION_POINT = 10
-    MASS_SCALE_FACTOR = 3
-    COLOR_SCALE_FACTOR = 2
     x_pos = self.get_x_pos()
     if self.distribution_shift == 'mass':
       if x_pos > TRANSITION_POINT:
         self.x_pos = x_pos
-        self._env.physics.model.body_mass[:] = self.initial_body_mass * MASS_SCALE_FACTOR
+        self._env.physics.model.body_mass[:] = self.initial_body_mass * self.scale_factor
       else:
         self._env.physics.model.body_mass[:] = self.initial_body_mass
-    else:
+    elif self.distribution_shift == 'color':
       if x_pos > TRANSITION_POINT:
-        self._env.physics.model.geom_rgba[1:] = self.initial_color * COLOR_SCALE_FACTOR
+        self._env.physics.model.geom_rgba[1:] = self.initial_color * self.scale_factor
       else:
         self._env.physics.model.geom_rgba[1:] = self.initial_color
+    elif self.distribution_shift == 'friction':
+      if x_pos > TRANSITION_POINT:
+        self._env.physics.model.geom_friction[:, 0] = self.initial_friction * self.scale_factor
+      else:
+        self._env.physics.model.geom_friction[:, 0] = self.initial_friction
 
     action = action.detach().numpy()
     reward = 0
@@ -185,11 +194,12 @@ class GymEnv():
     return torch.from_numpy(self._env.action_space.sample())
 
 
-def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift):
+def Env(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift, scale_factor):
   if env in GYM_ENVS:
     return GymEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth)
   elif env in CONTROL_SUITE_ENVS:
-    return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift)
+    return ControlSuiteEnv(env, symbolic, seed, max_episode_length, action_repeat, bit_depth, distribution_shift,
+                           scale_factor)
 
 
 # Wrapper for batching environments together

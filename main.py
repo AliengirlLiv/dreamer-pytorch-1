@@ -68,7 +68,8 @@ parser.add_argument('--checkpoint-experience', action='store_true', help='Checkp
 parser.add_argument('--models', type=str, default='', metavar='M', help='Load model checkpoint')
 parser.add_argument('--experience-replay', type=str, default='', metavar='ER', help='Load experience replay')
 parser.add_argument('--render', action='store_true', help='Render environment')
-parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color'])
+parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color', 'friction'])
+parser.add_argument('--scale-factor', type=float, default=5)
 args = parser.parse_args()
 args.overshooting_distance = min(args.chunk_size, args.overshooting_distance)  # Overshooting distance cannot be greater than chunk size
 print(' ' * 26 + 'Options')
@@ -96,7 +97,7 @@ writer = SummaryWriter(summary_name.format(args.env, args.id))
 
 # Initialise training environment and experience replay memory
 env = Env(args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat, args.bit_depth,
-          args.distribution_shift)
+          args.distribution_shift, args.scale_factor)
 if args.experience_replay != '' and os.path.exists(args.experience_replay):
   D = torch.load(args.experience_replay)
   metrics['steps'], metrics['episodes'] = [D.steps] * D.episodes, list(range(1, D.episodes + 1))
@@ -344,7 +345,7 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     value_model.eval()
     # Initialise parallelised test environments
     test_envs = EnvBatcher(Env, (args.env, args.symbolic_env, args.seed, args.max_episode_length, args.action_repeat,
-                                 args.bit_depth, args.distribution_shift), {}, args.test_episodes)
+                                 args.bit_depth, args.distribution_shift, args.scale_factor), {}, args.test_episodes)
     
     with torch.no_grad():
       observation, total_rewards, video_frames = test_envs.reset(), np.zeros((args.test_episodes, )), []
