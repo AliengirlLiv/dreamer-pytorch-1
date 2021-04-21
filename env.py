@@ -45,6 +45,7 @@ class ControlSuiteEnv():
     self.initial_color = None
     self.initial_friction = None
     self.x_pos = 0
+    self.transition = False
 
     if self.initial_body_mass is None:
       self.initial_body_mass = self._env.physics.model.body_mass.copy()
@@ -82,22 +83,25 @@ class ControlSuiteEnv():
   def get_body_mass(self):
     return self._env.physics.model.body_mass
 
+  def set_transition(self):
+    print("Setting transition")
+    self.transition = True
+
   def step(self, action):
-    TRANSITION_POINT = 10
     x_pos = self.get_x_pos()
     if self.distribution_shift == 'mass':
-      if x_pos > TRANSITION_POINT:
+      if self.transition:
         self.x_pos = x_pos
         self._env.physics.model.body_mass[:] = self.initial_body_mass * self.scale_factor
       else:
         self._env.physics.model.body_mass[:] = self.initial_body_mass
     elif self.distribution_shift == 'color':
-      if x_pos > TRANSITION_POINT:
+      if self.transition:
         self._env.physics.model.geom_rgba[1:] = self.initial_color * self.scale_factor
       else:
         self._env.physics.model.geom_rgba[1:] = self.initial_color
     elif self.distribution_shift == 'friction':
-      if x_pos > TRANSITION_POINT:
+      if self.transition:
         self._env.physics.model.geom_friction[:, 0] = self.initial_friction * self.scale_factor
       else:
         self._env.physics.model.geom_friction[:, 0] = self.initial_friction

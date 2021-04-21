@@ -194,6 +194,16 @@ if args.test:
 
 # Training (and testing)
 for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total=args.episodes, initial=metrics['episodes'][-1] + 1):
+
+  print("EPISODE", episode)
+  if episode >= 200:
+    print("setting")
+    try:
+      env.set_transition()
+      test_envs.set_transition()
+    except Exception as e:
+      print("error setting envs", e)
+
   # Model fitting
   losses = []
   model_modules = transition_model.modules+encoder.modules+observation_model.modules+reward_model.modules
