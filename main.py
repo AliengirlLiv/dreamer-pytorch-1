@@ -70,6 +70,9 @@ parser.add_argument('--experience-replay', type=str, default='', metavar='ER', h
 parser.add_argument('--render', action='store_true', help='Render environment')
 parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color', 'friction'])
 parser.add_argument('--scale-factor', type=float, default=5)
+parser.add_argument('--scale-lr', type=float, default=10)
+parser.add_argument('--cutoff', type=int, default=200)
+parser.add_argument('--decay-itrs', type=int, default=50)
 args = parser.parse_args()
 args.overshooting_distance = min(args.chunk_size, args.overshooting_distance)  # Overshooting distance cannot be greater than chunk size
 print(' ' * 26 + 'Options')
@@ -90,7 +93,8 @@ else:
   print("using CPU")
   args.device = torch.device('cpu')
 metrics = {'steps': [], 'episodes': [], 'train_rewards': [], 'test_episodes': [], 'test_rewards': [], 
-           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [], 'x_pos': [], 'mass' : []}
+           'observation_loss': [], 'reward_loss': [], 'kl_loss': [], 'actor_loss': [], 'value_loss': [], 'x_pos': [],
+           'mass' : [], 'friction' : [], 'color' : [], 'lr' : []}
 
 summary_name = results_dir + "/{}_{}_log"
 writer = SummaryWriter(summary_name.format(args.env, args.id))
@@ -126,7 +130,12 @@ value_model = ValueModel(args.belief_size, args.state_size, args.hidden_size, ar
 param_list = list(transition_model.parameters()) + list(observation_model.parameters()) + list(reward_model.parameters()) + list(encoder.parameters())
 value_actor_param_list = list(value_model.parameters()) + list(actor_model.parameters())
 params_list = param_list + value_actor_param_list
-model_optimizer = optim.Adam(param_list, lr=0 if args.learning_rate_schedule != 0 else args.model_learning_rate, eps=args.adam_epsilon)
+obs_params_list = list(observation_model.parameters()) + list(encoder.parameters())
+transition_params_list = list(transition_model.parameters())
+reward_params_list = list(reward_model.parameters())
+obs_optimizer = optim.Adam(obs_params_list, lr=0 if args.learning_rate_schedule != 0 else args.model_learning_rate, eps=args.adam_epsilon)
+transition_optimizer = optim.Adam(transition_params_list, lr=0 if args.learning_rate_schedule != 0 else args.model_learning_rate, eps=args.adam_epsilon)
+reward_optimizer = optim.Adam(reward_params_list, lr=0 if args.learning_rate_schedule != 0 else args.model_learning_rate, eps=args.adam_epsilon)
 actor_optimizer = optim.Adam(actor_model.parameters(), lr=0 if args.learning_rate_schedule != 0 else args.actor_learning_rate, eps=args.adam_epsilon)
 value_optimizer = optim.Adam(value_model.parameters(), lr=0 if args.learning_rate_schedule != 0 else args.value_learning_rate, eps=args.adam_epsilon)
 if args.models != '' and os.path.exists(args.models):
@@ -137,7 +146,9 @@ if args.models != '' and os.path.exists(args.models):
   encoder.load_state_dict(model_dicts['encoder'])
   actor_model.load_state_dict(model_dicts['actor_model'])
   value_model.load_state_dict(model_dicts['value_model'])
-  model_optimizer.load_state_dict(model_dicts['model_optimizer'])
+  obs_optimizer.load_state_dict(model_dicts['obs_optimizer'])
+  transition_optimizer.load_state_dict(model_dicts['transition_optimizer'])
+  reward_optimizer.load_state_dict(model_dicts['reward_optimizer'])
 if args.algo=="dreamer":
   print("DREAMER")
   planner = actor_model
@@ -196,7 +207,7 @@ if args.test:
 for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total=args.episodes, initial=metrics['episodes'][-1] + 1):
 
   print("EPISODE", episode)
-  if episode >= 200:
+  if episode >= args.cutoff:
     print("setting")
     try:
       env.set_transition()
@@ -255,12 +266,26 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     if args.learning_rate_schedule != 0:
       for group in model_optimizer.param_groups:
         group['lr'] = min(group['lr'] + args.model_learning_rate / args.model_learning_rate_schedule, args.model_learning_rate)
+    if episode > args.cutoff:
+      for group in transition_optimizer.param_groups:
+        steps_decaying = max(args.decay_itrs - (episode - args.cutoff), 0)
+        group['lr'] = max(args.model_learning_rate, args.model_learning_rate * args.scale_lr * steps_decaying / args.decay_itrs)
     model_loss = observation_loss + reward_loss + kl_loss
     # Update model parameters
-    model_optimizer.zero_grad()
-    model_loss.backward()
-    nn.utils.clip_grad_norm_(param_list, args.grad_clip_norm, norm_type=2)
-    model_optimizer.step()
+    obs_optimizer.zero_grad()
+    observation_loss.backward()
+    nn.utils.clip_grad_norm_(obs_params_list, args.grad_clip_norm, norm_type=2)
+    obs_optimizer.step()
+
+    transition_optimizer.zero_grad()
+    kl_loss.backward()
+    nn.utils.clip_grad_norm_(transition_params_list, args.grad_clip_norm, norm_type=2)
+    transition_optimizer.step()
+
+    reward_optimizer.zero_grad()
+    reward_loss.backward()
+    nn.utils.clip_grad_norm_(reward_params_list, args.grad_clip_norm, norm_type=2)
+    reward_optimizer.step()
 
     #Dreamer implementation: actor loss calculation and optimization    
     with torch.no_grad():
@@ -339,6 +364,9 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     metrics['train_rewards'].append(total_reward)
     metrics['x_pos'].append(env.get_x_pos())
     metrics['mass'].append(np.mean(env.get_body_mass()))
+    metrics['friction'].append(np.mean(env.get_friction()))
+    metrics['color'].append(np.mean(env.get_color()))
+    metrics['lr'].append(np.mean(transition_optimizer.param_groups[0]['lr']))
 
     lineplot(metrics['episodes'][-len(metrics['train_rewards']):], metrics['train_rewards'], 'train_rewards', results_dir)
 
@@ -406,6 +434,9 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
   writer.add_scalar("value_loss",  np.mean(metrics['value_loss'][-1]), metrics['steps'][-1])
   writer.add_scalar("x_pos", metrics['x_pos'][-1], metrics['steps'][-1])
   writer.add_scalar("mass", metrics['mass'][-1], metrics['steps'][-1])
+  writer.add_scalar("friction", metrics['friction'][-1], metrics['steps'][-1])
+  writer.add_scalar("color", metrics['color'][-1], metrics['steps'][-1])
+  writer.add_scalar("lr", metrics['lr'][-1], metrics['steps'][-1])
 
   print("episodes: {}, total_steps: {}, train_reward: {} ".format(metrics['episodes'][-1], metrics['steps'][-1], metrics['train_rewards'][-1]))
 
@@ -417,7 +448,9 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
                 'encoder': encoder.state_dict(),
                 'actor_model': actor_model.state_dict(),
                 'value_model': value_model.state_dict(),
-                'model_optimizer': model_optimizer.state_dict(),
+                'obs_optimizer': obs_optimizer.state_dict(),
+                'transition_optimizer': transition_optimizer.state_dict(),
+                'reward_optimizer': reward_optimizer.state_dict(),
                 'actor_optimizer': actor_optimizer.state_dict(),
                 'value_optimizer': value_optimizer.state_dict()
                 }, os.path.join(results_dir, 'models_%d.pth' % episode))

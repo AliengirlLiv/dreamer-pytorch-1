@@ -83,6 +83,12 @@ class ControlSuiteEnv():
   def get_body_mass(self):
     return self._env.physics.model.body_mass
 
+  def get_friction(self):
+    return self._env.physics.model.geom_friction[0, 0]
+
+  def get_color(self):
+    return self._env.physics.model.geom_rgba[1, :3]
+
   def set_transition(self):
     print("Setting transition")
     self.transition = True
