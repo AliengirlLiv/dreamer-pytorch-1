@@ -273,12 +273,12 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
     model_loss = observation_loss + reward_loss + kl_loss
     # Update model parameters
     obs_optimizer.zero_grad()
-    observation_loss.backward()
+    observation_loss.backward(retain_graph=True)
     nn.utils.clip_grad_norm_(obs_params_list, args.grad_clip_norm, norm_type=2)
     obs_optimizer.step()
 
     transition_optimizer.zero_grad()
-    kl_loss.backward()
+    kl_loss.backward(retain_graph=True)
     nn.utils.clip_grad_norm_(transition_params_list, args.grad_clip_norm, norm_type=2)
     transition_optimizer.step()
 
