@@ -68,7 +68,7 @@ parser.add_argument('--checkpoint-experience', action='store_true', help='Checkp
 parser.add_argument('--models', type=str, default='', metavar='M', help='Load model checkpoint')
 parser.add_argument('--experience-replay', type=str, default='', metavar='ER', help='Load experience replay')
 parser.add_argument('--render', action='store_true', help='Render environment')
-parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color', 'friction'])
+parser.add_argument('--distribution_shift', type=str, default='mass', choices=['mass', 'color', 'friction', 'none'])
 parser.add_argument('--scale-factor', type=float, default=5)
 parser.add_argument('--scale-lr', type=float, default=10)
 parser.add_argument('--cutoff', type=int, default=200)

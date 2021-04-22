@@ -227,6 +227,10 @@ class EnvBatcher():
     self.dones = [False] * self.n
     return torch.cat(observations), torch.cat(state)
 
+  def set_transition(self):
+    for env in self.envs:
+      env.set_transition()
+
  # Steps/resets every environment and returns (observation, reward, done)
   def step(self, actions):
     done_mask = torch.nonzero(torch.tensor(self.dones))[:, 0]  # Done mask to blank out observations and zero rewards for previously terminated environments
