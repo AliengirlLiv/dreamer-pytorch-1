@@ -73,6 +73,7 @@ parser.add_argument('--scale-factor', type=float, default=5)
 parser.add_argument('--scale-lr', type=float, default=10)
 parser.add_argument('--cutoff', type=int, default=200)
 parser.add_argument('--decay-itrs', type=int, default=50)
+parser.add_argument('--decay-params', type=str, default='dynamics')
 args = parser.parse_args()
 args.overshooting_distance = min(args.chunk_size, args.overshooting_distance)  # Overshooting distance cannot be greater than chunk size
 print(' ' * 26 + 'Options')
@@ -267,7 +268,11 @@ for episode in tqdm(range(metrics['episodes'][-1] + 1, args.episodes + 1), total
       for group in model_optimizer.param_groups:
         group['lr'] = min(group['lr'] + args.model_learning_rate / args.model_learning_rate_schedule, args.model_learning_rate)
     if episode > args.cutoff:
-      for group in transition_optimizer.param_groups:
+      if args.decay_params == 'dynamics':
+        decaying_optimizer = transition_optimizer
+      elif args.decay_params == 'visual':
+        decaying_optimizer = obs_optimizer
+      for group in decaying_optimizer.param_groups:
         steps_decaying = max(args.decay_itrs - (episode - args.cutoff), 0)
         group['lr'] = max(args.model_learning_rate, args.model_learning_rate * args.scale_lr * steps_decaying / args.decay_itrs)
     model_loss = observation_loss + reward_loss + kl_loss
